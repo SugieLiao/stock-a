@@ -1,0 +1,31 @@
+<!-- stock-a 控制按钮：重新抽数 / 通达信量化。发布报告时注入到 <div class="sub">...</div> 之后、第一个 <div class="card"> 之前 -->
+<div class="ctrl-bar">
+  <button class="ctrl-btn re" onclick="saTrigger('reextract')">🔄 重新抽数</button>
+  <button class="ctrl-btn tdx" onclick="saTrigger('tdx')">📊 通达信量化</button>
+  <span class="ctrl-status" id="saStatus"></span>
+</div>
+<style>
+.ctrl-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+.ctrl-btn{border:none;border-radius:10px;padding:9px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.12);transition:transform .12s,opacity .2s}
+.ctrl-btn:hover{transform:translateY(-1px)}
+.ctrl-btn:active{transform:scale(.97)}
+.ctrl-btn:disabled{opacity:.5;cursor:wait}
+.ctrl-btn.re{background:linear-gradient(135deg,#4a90e2,#357abd)}
+.ctrl-btn.tdx{background:linear-gradient(135deg,#ff8a3d,#f46c12)}
+.ctrl-status{font-size:13px;color:#888;min-height:18px}
+.ctrl-status.ok{color:#48c779;font-weight:600}
+.ctrl-status.err{color:#f56565;font-weight:600}
+.ctrl-status.busy{color:#ff8a3d}
+</style>
+<script>
+function saSet(t,m){var e=document.getElementById('saStatus');if(e){e.textContent=m||'';e.className='ctrl-status '+(t||'')}}
+function saTrigger(cmd){
+  var btns=document.querySelectorAll('.ctrl-btn');btns.forEach(function(b){b.disabled=true});
+  saSet('busy','已提交，正在排队执行…完成后会邮件通知');
+  fetch('/api/trigger?cmd='+encodeURIComponent(cmd),{method:'POST'})
+    .then(function(r){return r.json()})
+    .then(function(d){ if(d&&d.ok){saSet('ok','✅ 已提交：'+(cmd==='tdx'?'通达信量化 Task1-5':'重新抽数')+'。预计5分钟内开始执行，完成后邮件通知 hao.liao01@qq.com')} else {saSet('err','❌ 提交失败：'+(d&&d.error||'未知错误'))} })
+    .catch(function(e){saSet('err','❌ 网络错误：'+e.message)})
+    .finally(function(){btns.forEach(function(b){b.disabled=false})});
+}
+</script>
