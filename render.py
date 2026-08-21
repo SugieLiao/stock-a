@@ -1006,6 +1006,7 @@ h1{{font-size:24px;margin:0 0 4px}} .sub{{color:#888;font-size:13px;margin-botto
 .kpi{{flex:1;min-width:150px;background:#fafbfc;border:1px solid #eef0f3;border-radius:10px;padding:12px 14px}}
 .kpi .lab{{font-size:12px;color:#888}} .kpi .val{{font-size:22px;font-weight:700;margin-top:4px}}
 canvas{{height:300px!important;max-height:300px;width:100%!important}}
+#cRps{{height:1000px!important;max-height:1000px!important}}
 body{{overflow-x:hidden}}
 .grid2{{display:grid;grid-template-columns:1fr;gap:16px}}
 @media(min-width:900px){{ .grid2{{grid-template-columns:1fr 1fr}} }}
@@ -1149,18 +1150,28 @@ const RED='{RED}', GREEN='{GREEN}', GREY='{GREY}';
 const verticalLinePlugin = {{
   id:'verticalLine',
   afterDraw(chart){{
-    let x = null;
-    if(chart._hx != null) x = chart._hx;
-    else {{ const tt = chart.tooltip; if(tt && tt.getActiveElements && tt.getActiveElements().length) x = tt.getActiveElements()[0].element.x; }}
-    if(x == null) return;
-    const top = chart.chartArea.top, bot = chart.chartArea.bottom;
+    const isH = chart.options && chart.options.indexAxis === 'y';
     const ctx = chart.ctx;
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x, top); ctx.lineTo(x, bot);
     ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,.4)';
     ctx.setLineDash([4,3]);
-    ctx.stroke();
+    if(isH){{
+      let y = null;
+      if(chart._hy != null) y = chart._hy;
+      else {{ const tt = chart.tooltip; if(tt && tt.getActiveElements && tt.getActiveElements().length) y = tt.getActiveElements()[0].element.y; }}
+      if(y == null){{ ctx.restore(); return; }}
+      ctx.beginPath();
+      ctx.moveTo(chart.chartArea.left, y); ctx.lineTo(chart.chartArea.right, y);
+      ctx.stroke();
+    }} else {{
+      let x = null;
+      if(chart._hx != null) x = chart._hx;
+      else {{ const tt = chart.tooltip; if(tt && tt.getActiveElements && tt.getActiveElements().length) x = tt.getActiveElements()[0].element.x; }}
+      if(x == null){{ ctx.restore(); return; }}
+      ctx.beginPath();
+      ctx.moveTo(x, chart.chartArea.top); ctx.lineTo(x, chart.chartArea.bottom);
+      ctx.stroke();
+    }}
     ctx.restore();
   }}
 }};
@@ -1204,23 +1215,41 @@ function cloneCfg(config){{
 }}
 function attachHover(ch, cv, onMove){{
   let rafId = null;
+  const isH = ch.options && ch.options.indexAxis === 'y';
   cv.addEventListener('mousemove', (e)=>{{
     const rect = cv.getBoundingClientRect();
-    const xs = ch.scales.x; if(!xs) return;
     const dpr = window.devicePixelRatio || 1;
-    const x = (e.clientX - rect.left) * dpr;
-    const idx = Math.round(xs.getValueForPixel(x));
     const labels = (ch.data && ch.data.labels) || [];
-    const v = (idx>=0 && idx<labels.length) ? xs.getPixelForValue(idx) : null;
-    if(v !== ch._hx){{
-      ch._hx = v;
-      if(rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(()=>{{ ch.update('none'); rafId=null; }});
+    let idx = null;
+    if(isH){{
+      const ys = ch.scales.y; if(!ys) return;
+      const y = (e.clientY - rect.top) * dpr;
+      idx = Math.round(ys.getValueForPixel(y));
+      const v = (idx>=0 && idx<labels.length) ? ys.getPixelForValue(idx) : null;
+      if(v !== ch._hy){{
+        ch._hy = v;
+        if(rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(()=>{{ ch.update('none'); rafId=null; }});
+      }}
+    }} else {{
+      const xs = ch.scales.x; if(!xs) return;
+      const x = (e.clientX - rect.left) * dpr;
+      idx = Math.round(xs.getValueForPixel(x));
+      const v = (idx>=0 && idx<labels.length) ? xs.getPixelForValue(idx) : null;
+      if(v !== ch._hx){{
+        ch._hx = v;
+        if(rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(()=>{{ ch.update('none'); rafId=null; }});
+      }}
     }}
     if(onMove) onMove((idx>=0 && idx<labels.length)?idx:null, e);
   }});
   cv.addEventListener('mouseleave', ()=>{{
-    if(ch._hx!==null){{ ch._hx=null; if(rafId) cancelAnimationFrame(rafId); ch.update('none'); }}
+    if(isH){{
+      if(ch._hy!==null){{ ch._hy=null; if(rafId) cancelAnimationFrame(rafId); ch.update('none'); }}
+    }} else {{
+      if(ch._hx!==null){{ ch._hx=null; if(rafId) cancelAnimationFrame(rafId); ch.update('none'); }}
+    }}
     if(onMove) onMove(null, null);
   }});
 }}
@@ -1250,7 +1279,7 @@ function makeChart(id, config, onMove){{
   return ch;
 }}
 function lineCfg(labels, datasets, opts){{ return {{type:'line', data:{{labels,datasets}}, options:Object.assign({{responsive:true,elements:{{point:{{hitRadius:8}}}},plugins:{{legend:{{labels:{{font:{{size:11}}}}}}}},scales:{{x:{{ticks:{{maxTicksLimit:12,font:{{size:10}}}},grid:{{display:false}}}},y:{{ticks:{{font:{{size:10}}}},grid:{{color:'#eee'}}}}}}}}, opts||{{}})}}; }}
-function barCfg(labels, label, data, color, rot){{ return {{type:'bar', data:{{labels,datasets:[{{label,data,backgroundColor:color, barPercentage:0.4, categoryPercentage:0.6}}]}}, options:{{responsive:true,plugins:{{legend:{{display:false}}}},scales:{{x:{{ticks:{{font:{{size:10}},maxRotation:rot||0}}}},y:{{grid:{{color:'#eee'}}}}}}}}}}; }}
+function barCfg(labels, label, data, color, rot){{ return {{type:'bar', data:{{labels,datasets:[{{label,data,backgroundColor:color, barPercentage:0.3, categoryPercentage:0.5}}]}}, options:{{responsive:true,plugins:{{legend:{{display:false}}}},scales:{{x:{{ticks:{{font:{{size:10}},maxRotation:rot||0}}}},y:{{grid:{{color:'#eee'}}}}}}}}}}; }}
 
 const H=D.hist;
 makeChart('cTurn', lineCfg(H.dates, [{{label:'总成交额(亿)',data:H.turnover,borderColor:GREY,fill:false,pointRadius:1,tension:.25,borderWidth:1}}]));
@@ -1328,7 +1357,7 @@ function renderStyleTip(idx, e){{
 makeChart('cSec', {{
   type:'bar',
   data:{{labels:D.sec_bar.map(s=>s.name), datasets:[
-    {{type:'bar', label:'成交额(亿)', data:D.sec_bar.map(s=>s.v), backgroundColor:'#2b6cb0', yAxisID:'y', barPercentage:0.4, categoryPercentage:0.6}},
+    {{type:'bar', label:'成交额(亿)', data:D.sec_bar.map(s=>s.v), backgroundColor:'#2b6cb0', yAxisID:'y', barPercentage:0.3, categoryPercentage:0.5}},
     {{type:'line', label:'成交额占比%', data:D.sec_bar.map(s=>s.ratio), borderColor:'#d8392b', backgroundColor:'#d8392b', yAxisID:'y1', pointRadius:3, borderWidth:2, tension:.25}}
   ]}},
   options:{{responsive:true, plugins:{{legend:{{display:false}}}}, scales:{{
