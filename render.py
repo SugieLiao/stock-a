@@ -367,6 +367,19 @@ def build_html(d, hist, midday=False):
             tj = json.load(open(tp, encoding="utf-8"))
             if tj.get("ok") and tj.get("dates"):
                 tr = tj
+                # 历史补发口径：只保留 report_date 及之前的数据，
+                # 避免"重新抽数"补发历史日期时 TR 表格/曲线出现未来数据
+                # （tr_emotion.json 是全局单一文件，始终滚动到最新）。
+                di = len(tr["dates"])
+                for i, dt in enumerate(tr["dates"]):
+                    if dt > report_date:
+                        di = i
+                        break
+                if di < len(tr["dates"]):
+                    tr = dict(tr, dates=tr["dates"][:di],
+                              **{k: tr[k][:di] for k in ("htr10", "htr20", "htr40") if k in tr})
+                if not tr["dates"]:
+                    tr = None
         except Exception:
             pass
     def tr_zone(v):
