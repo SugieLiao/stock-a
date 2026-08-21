@@ -482,12 +482,12 @@ def build_html(d, hist, midday=False):
                 ds("rps5", "#2b6cb0"), ds("rps10", "#16a34a"),
                 ds("rps20", "#ca8a04"), ds("rps50", "#d8392b")]},
             "options": {
-                "indexAxis": "y", "responsive": True,
+                "indexAxis": "y", "responsive": True, "maintainAspectRatio": False,
                 "plugins": {"legend": {"labels": {"font": {"size": 11}}}},
                 "scales": {
                     "x": {"min": 0, "max": 100, "grid": {"color": "#eee"},
                           "title": {"display": True, "text": "RPS", "font": {"size": 10}}},
-                    "y": {"ticks": {"font": {"size": 10}, "autoSkip": False}}}
+                    "y": {"ticks": {"font": {"size": 12}, "autoSkip": False}}}
             }
         }
     else:
@@ -667,11 +667,26 @@ function rpsExternalTooltip(context){
     html+='<div style="color:'+col+'">■ '+k+': '+v.toFixed(2)+'</div>';
   });
   el.innerHTML=html;
-  var cv=context.chart.canvas;
+  var ch=context.chart;
+  var cv=ch.canvas;
   var rect=cv.getBoundingClientRect();
   el.style.opacity=1;
-  el.style.left=(rect.left+window.pageXOffset+t.caretX)+'px';
-  el.style.top=(rect.top+window.pageYOffset+t.caretY+14)+'px';
+  // 优先用鼠标实际位置，回退到 caret 位置
+  var mx = (ch._mouseX != null) ? ch._mouseX : (rect.left + t.caretX);
+  var my = (ch._mouseY != null) ? ch._mouseY : (rect.top + t.caretY);
+  var tipW = el.offsetWidth || 200;
+  var tipH = el.offsetHeight || 100;
+  var vw = window.innerWidth;
+  var vh = window.innerHeight;
+  // 默认在鼠标右下方15px
+  var left = mx + 15 + window.pageXOffset;
+  var top = my + 15 + window.pageYOffset;
+  // 超出右边界则放到鼠标左侧
+  if(mx + 15 + tipW > vw) left = mx - tipW - 15 + window.pageXOffset;
+  // 超出下边界则放到鼠标上方
+  if(my + 15 + tipH > vh) top = my - tipH - 15 + window.pageYOffset;
+  el.style.left=left+'px';
+  el.style.top=top+'px';
 }
 function setHighlight(id, idx){
   var ch=INSTANCES[id]; if(!ch) return;
@@ -723,11 +738,12 @@ function buildLegends(){
 if(D.rps_chart_cfg){
   var rch=INSTANCES['cRps'];
   if(rch){
-    // 横向条形图(indexAxis:y)必须用 nearest+intersect，按鼠标最近柱子触发；
+    // 横向条形图(indexAxis:y)用 index+axis:y，按鼠标所在行触发整行所有系列；
     // 值取 parsed.x（X轴=RPS数值），parsed.y 是行号索引。
-    rch.options.interaction={mode:'index', intersect:false};
+    rch.options.interaction={mode:'index', axis:'y', intersect:false};
     rch.options.plugins.tooltip.enabled=false;
     rch.options.plugins.tooltip.mode='index';
+    rch.options.plugins.tooltip.axis='y';
     rch.options.plugins.tooltip.intersect=false;
     rch.options.plugins.tooltip.external=rpsExternalTooltip;
     rch.update();
@@ -1170,8 +1186,9 @@ const verticalLinePlugin = {{
     ctx.setLineDash([4,3]);
     if(isH){{
       let y = null;
-      if(chart._hy != null) y = chart._hy;
-      else {{ const tt = chart.tooltip; if(tt && tt.getActiveElements && tt.getActiveElements().length) y = tt.getActiveElements()[0].element.y; }}
+      const tt = chart.tooltip;
+      if(tt && tt.getActiveElements && tt.getActiveElements().length) y = tt.getActiveElements()[0].element.y;
+      else if(chart._hy != null) y = chart._hy;
       if(y == null){{ ctx.restore(); return; }}
       ctx.beginPath();
       ctx.moveTo(chart.chartArea.left, y); ctx.lineTo(chart.chartArea.right, y);
@@ -1230,6 +1247,8 @@ function attachHover(ch, cv, onMove){{
   let rafId = null;
   const isH = ch.options && ch.options.indexAxis === 'y';
   cv.addEventListener('mousemove', (e)=>{{
+    ch._mouseX = e.clientX;
+    ch._mouseY = e.clientY;
     const rect = cv.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const labels = (ch.data && ch.data.labels) || [];
